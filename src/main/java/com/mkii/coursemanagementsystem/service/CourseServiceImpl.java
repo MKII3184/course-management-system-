@@ -7,15 +7,20 @@ import com.mkii.coursemanagementsystem.repository.CourseRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import com.mkii.coursemanagementsystem.common.MessageConstants;
+import com.mkii.coursemanagementsystem.common.exception.ResourceNotFoundException;
+import com.mkii.coursemanagementsystem.dao.CourseDao;
 import java.util.stream.Collectors;
 
 @Service
 public class CourseServiceImpl implements CourseService {
 
     private final CourseRepository courseRepository;
+    private final CourseDao courseDao;
 
-    public CourseServiceImpl(CourseRepository courseRepository) {
+    public CourseServiceImpl(CourseRepository courseRepository, CourseDao courseDao) {
         this.courseRepository = courseRepository;
+        this.courseDao = courseDao;
     }
 
     // Hàm phụ trợ convert Entity -> ResponseDTO
@@ -40,7 +45,7 @@ public class CourseServiceImpl implements CourseService {
     @Override
     public CourseResponseDTO getCourseById(Long id) {
         Course course = courseRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy khóa học với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(String.format(MessageConstants.COURSE_NOT_FOUND, id)));
         return mapToDTO(course);
     }
 
@@ -52,7 +57,7 @@ public class CourseServiceImpl implements CourseService {
         course.setDuration(requestDTO.getDuration());
         course.setPrice(requestDTO.getPrice());
 
-        Course savedCourse = courseRepository.save(course);
+        Course savedCourse = courseDao.create(course);
         return mapToDTO(savedCourse);
     }
 

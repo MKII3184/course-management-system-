@@ -1,5 +1,6 @@
-package com.mkii.coursemanagementsystem.controller;
+package com.mkii.coursemanagementsystem.rest;
 
+import com.mkii.coursemanagementsystem.common.ApiConstants;
 import com.mkii.coursemanagementsystem.dto.CourseRequestDTO;
 import com.mkii.coursemanagementsystem.dto.CourseResponseDTO;
 import com.mkii.coursemanagementsystem.service.CourseService;
@@ -8,12 +9,12 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/courses")
-public class CourseController {
+@RequestMapping(ApiConstants.BASE_COURSE_URL)
+public class CourseRest {
 
     private final CourseService courseService;
 
-    public CourseController(CourseService courseService) {
+    public CourseRest(CourseService courseService) {
         this.courseService = courseService;
     }
 
@@ -32,15 +33,11 @@ public class CourseController {
         return courseService.createCourse(requestDTO);
     }
 
-    // API Query 1: Tìm kiếm theo từ khóa tên
-    // Ví dụ URL: http://localhost:8080/api/courses/search?keyword=Spring
     @GetMapping("/search")
     public List<CourseResponseDTO> searchCourses(@RequestParam String keyword) {
         return courseService.searchCourses(keyword);
     }
 
-    // API Query 2: Lọc theo khoảng giá
-    // Ví dụ URL: http://localhost:8080/api/courses/filter?minPrice=500000&maxPrice=1500000
     @GetMapping("/filter")
     public List<CourseResponseDTO> filterByPrice(
             @RequestParam Double minPrice,
