@@ -31,3 +31,13 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Project Backup & Logs ###
+.backup/
+*.log
+
+### Agent Configurations & Brain Memory ###
+.agents/
+memory.json
+docs/
+Course Management System - Full APIs.postman_collection.json

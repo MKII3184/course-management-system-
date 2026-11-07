@@ -3,13 +3,11 @@ package com.mkii.coursemanagementsystem.hibernateDao;
 import com.mkii.coursemanagementsystem.common.MessageConstants;
 import com.mkii.coursemanagementsystem.dao.IGenericDao;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.NoResultException;
 import jakarta.persistence.Query;
 import jakarta.persistence.TypedQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.support.SimpleJpaRepository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +16,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Base Hibernate Generic DAO providing standard CRUD and basic JPQL operations.
+ * Kept concise and clean. Advanced Pagination & Sorting has been separated into
+ * {@link HibernatePaginationSortingDao}.
+ */
 public class HibernateGenericDao<Pk, Entity> extends SimpleJpaRepository<Entity, Pk> implements IGenericDao<Pk, Entity> {
 
     private static final Logger logger = LoggerFactory.getLogger(HibernateGenericDao.class);
@@ -47,6 +50,8 @@ public class HibernateGenericDao<Pk, Entity> extends SimpleJpaRepository<Entity,
         this.entityManager = entityManager;
     }
 
+    // ──────────── CRUD Operations ────────────
+
     @Override
     @Transactional
     public Entity create(Entity anEntity) {
@@ -54,7 +59,7 @@ public class HibernateGenericDao<Pk, Entity> extends SimpleJpaRepository<Entity,
             logger.warn(MessageConstants.ENTITY_CANNOT_BE_NULL);
             throw new IllegalArgumentException(String.format(MessageConstants.CANNOT_CREATE_NULL_ENTITY, getType().getName()));
         }
-        return save(anEntity);
+        return super.save(anEntity);
     }
 
     @Override
@@ -74,7 +79,7 @@ public class HibernateGenericDao<Pk, Entity> extends SimpleJpaRepository<Entity,
             logger.warn(MessageConstants.ENTITY_CANNOT_BE_NULL);
             throw new IllegalArgumentException(String.format(MessageConstants.CANNOT_SAVE_OR_UPDATE_NULL_ENTITY, getType().getName()));
         }
-        return save(anEntity);
+        return super.save(anEntity);
     }
 
     @Override
@@ -98,7 +103,23 @@ public class HibernateGenericDao<Pk, Entity> extends SimpleJpaRepository<Entity,
     }
 
     @Override
+    @Transactional
+    public void deleteByPk(Pk id) {
+        deleteById(id);
+    }
+
+    // ──────────── Basic Queries ────────────
+
+    @Override
     public Entity get(Pk id) {
+        if (id == null) {
+            return null;
+        }
+        return super.findById(id).orElse(null);
+    }
+
+    @Override
+    public Entity findByPk(Pk id) {
         if (id == null) {
             return null;
         }
@@ -114,18 +135,49 @@ public class HibernateGenericDao<Pk, Entity> extends SimpleJpaRepository<Entity,
     }
 
     @Override
+    public Entity getByField(String fieldName, Object value) {
+        if (!isValidIdentifier(fieldName)) {
+            logger.warn("Invalid field name: {}", fieldName);
+            return null;
+        }
+        logger.info("Getting {} by field: {} = {}", getType().getSimpleName(), fieldName, value);
+        try {
+            String jpql = "SELECT e FROM " + getType().getSimpleName() + " e WHERE e." + fieldName + " = :value";
+            TypedQuery<Entity> query = entityManager.createQuery(jpql, getType());
+            query.setParameter("value", value);
+            List<Entity> results = query.setMaxResults(1).getResultList();
+            return results.isEmpty() ? null : results.get(0);
+        } catch (Exception e) {
+            logger.error("Error getting {} by field {}: {}", getType().getSimpleName(), fieldName, e.getMessage());
+            return null;
+        }
+    }
+
+    @Override
+    public List<Entity> findByField(String fieldName, Object value) {
+        if (!isValidIdentifier(fieldName)) {
+            logger.warn("Invalid field name: {}", fieldName);
+            return Collections.emptyList();
+        }
+        logger.info("Finding {} list by field: {} = {}", getType().getSimpleName(), fieldName, value);
+        try {
+            String jpql = "SELECT e FROM " + getType().getSimpleName() + " e WHERE e." + fieldName + " = :value";
+            TypedQuery<Entity> query = entityManager.createQuery(jpql, getType());
+            query.setParameter("value", value);
+            return query.getResultList();
+        } catch (Exception e) {
+            logger.error("Error finding {} by field {}: {}", getType().getSimpleName(), fieldName, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    protected boolean isValidIdentifier(String identifier) {
+        return identifier != null && identifier.matches("^[a-zA-Z0-9_]+$");
+    }
+
+    @Override
     public List<Entity> getAll() {
         return findAll();
-    }
-
-    @Override
-    public Page<Entity> getAll(Pageable pageable) {
-        return findAll(pageable);
-    }
-
-    @Override
-    public List<Entity> getAll(Sort sort) {
-        return findAll(sort);
     }
 
     @Override
@@ -145,6 +197,8 @@ public class HibernateGenericDao<Pk, Entity> extends SimpleJpaRepository<Entity,
         }
         super.deleteAll(entities);
     }
+
+    // ──────────── Utility ────────────
 
     @Override
     public boolean exists(Pk id) {
@@ -171,7 +225,40 @@ public class HibernateGenericDao<Pk, Entity> extends SimpleJpaRepository<Entity,
         }
     }
 
-    // JPQL / HQL Helper Methods
+    @Override
+    public org.hibernate.Session getSession() {
+        return (org.hibernate.Session) entityManager.getDelegate();
+    }
+
+    @Override
+    public void enableFilter(String filterName, String paramName, Object value) {
+        org.hibernate.Session session = getSession();
+        if (session != null) {
+            session.enableFilter(filterName).setParameter(paramName, value);
+        }
+    }
+
+    @Override
+    public void enableFilter(String filterName, Map<String, Object> params) {
+        org.hibernate.Session session = getSession();
+        if (session != null) {
+            org.hibernate.Filter filter = session.enableFilter(filterName);
+            if (params != null) {
+                params.forEach(filter::setParameter);
+            }
+        }
+    }
+
+    @Override
+    public void disableFilter(String filterName) {
+        org.hibernate.Session session = getSession();
+        if (session != null) {
+            session.disableFilter(filterName);
+        }
+    }
+
+    // ──────────── JPQL / HQL Helper Methods ────────────
+
     public List<Entity> findByHql(String hql, Map<String, Object> params) {
         TypedQuery<Entity> query = entityManager.createQuery(hql, getType());
         if (params != null) {
